@@ -1,6 +1,31 @@
 plmtools
 ========
 
+Overview
+--------
+
+plmtools are a collection of tools to interact with INSTEON PLM devices. It 
+was originally written by Matthew Randolph, but his version 
+(http://sourceforge.net/projects/plmtools/) doesn't work with my 2413U. This
+repository contains integrated fixes to make it work, as well as more 
+information on how to set up and use the tools (as documentation is lacking).
+
+To get started:
+
+- Create /etc/insteon.conf (see insteon.conf.example)
+- Create /etc/plmtools.conf - this file should have one line in it, e.g.
+    PLMTTY  "/dev/ttyUSB0"
+- 'sudo make install'
+- '/usr/bin/insteon everything off' to confirm things work.
+
+For new INSTEON installs, I recommend using HouseLinc on Windows to confirm
+that all of your hardware works correctly. It took several hours of debugging
+to get this working on Linux, though I was able to verify that this wasn't a
+hardware or pairing issue by testing it with HouseLinc's GUI on my laptop.
+
+Original Readme
+---------------
+
 plmcat - reads data from the PLM and outputs in ASCII hexadecimal notation
 plmsend - send hex data to PLM and wait for response or timeout
 plmtty - interactive PLM communication program
