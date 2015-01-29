@@ -1,0 +1,32 @@
+There is much to do.
+
+- Continue to clean up all the code.
+- Make plmtty's interface self-explanatory.
+- Add documentation.
+
+There is an ugly hack in plmsend which stops plmcat then restarts it again 
+in order to work around the plm's screwey flow control.  I'm not sure what 
+the fix is.  At best, it would merely require a minor paradigm shift.  But 
+at worst, I'm afraid it might involve creating a plm kernel module.  I don't 
+plan to tackle this one immediately.
+
+Currently, terminating x10toinst might leave an orphaned plmcat running 
+that will not close automatically until data comes in on the PLM.  x10toinst
+tries to kill these plmcats, but might miss some.
+
+Assuming anyone is actually using plmtools and writing scripts, it might make
+sense to have a forum of some sort for users to share scripts with eachother.
+
+I am also kicking around the idea of splitting the C programs and the shell
+scripts into two separate packages.  It might also make sense to have some
+central repository of user contributed scripts.  If the files wind up getting
+hosted on sourceforge, I believe contributed scripts will all have to use
+sourceforge approved licenses, so bear that in mind.
+
+Finally, the current interface to the C programs is through hex strings.  This
+requires a lot of heavy lifting to be done in the shell scripts with sed, awk,
+cut, etc.  I am considering the possibility of adding a higher level interface
+to the PLM in the C programs.  This would reduce the burden on the shell
+scripts and would translate into faster response times.  However, I think the
+major source of delays is in the latency of the network, and not in the
+overhead of the system calls.

@@ -1,0 +1,23 @@
+Please note: running "make install" will overwrite the insteon and x10toinst
+shell scripts as well.  If you have customized earlier versions of them,
+make sure that you have a backup.  You have been warned.
+
+To install, run the following:
+
+	make install
+
+Be sure to create /etc/plmtools.conf with the line:
+
+PLMTTY	"/dev/ttyXXX"
+
+where "/dev/ttyXXX" is the TTY device your PLM is attached to.
+
+If you plan to use plmcat, plmsend, and plmtty directly rather than through
+the included shell scripts, you may want to set TTYLINENAME in plm.h to the
+PLM TTY device.  However, PLMTTY in plmtools.conf will override this in the 
+included shell scripts only.  If you want to hardcode TTYLINENAME into
+plmcat, plmsend, and plmtty as well as use the included shell scripts, you
+must set the device filename in both plm.h and plmtools.conf.  This 
+requirement will change when I decide that I care enough to fix it.
+
+See insteon.conf.example, x10toinst.conf.example and plmtools.conf.example.

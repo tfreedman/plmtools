@@ -1,0 +1,204 @@
+#!/bin/bash
+#    insteon - wrapper to plmsend for a more intuitive interface
+#    Copyright (C) 2008  Matthew Randolph
+#    Please see the file COPYING for license information.
+#
+#    This program is free software; you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation; either version 2 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program; if not, write to the Free Software
+#    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
+CONFDIR="/etc"
+BINDIR="/usr/bin"
+
+usage() {
+cat << end_of_usage
+USAGE: $(basename $0) device command [command arg]
+
+commands:	on [0-100]
+		off
+		bright
+		dim
+		ping
+		status
+		level
+end_of_usage
+}
+
+if [ "$1" == "-h" -o "$1" == "--help" -o "$#" -eq 0 ]
+then
+	usage
+	exit 0
+fi
+
+if [ ! -e "${CONFDIR}/insteon.conf" ]
+then
+	echo "ERROR: ${CONFDIR}/insteon.conf not found!" >&2
+	exit 1
+fi
+
+if [ ! -e "${CONFDIR}/plmtools.conf" ]
+then
+	DEV="/dev/ttyUSB0"
+else
+	DEV=$(grep "^PLMTTY\>" ${CONFDIR}/plmtools.conf | sed 's/^.*"\(.*\)"$/\1/')
+fi
+
+if [ "$1" == "everything" ]
+then
+	for d in $(grep '^[^#].*[[:xdigit:]]\{6\}$' ${CONFDIR}/insteon.conf | awk '{printf $1 " "}')
+	do
+		${BINDIR}/insteon "$d" "$2"
+	done
+	exit 0
+fi
+
+line=$(grep "^$1\>" "${CONFDIR}/insteon.conf")
+if [ "$line" == "" ]
+then
+	echo "Unknown device"
+	exit 1
+fi
+
+if ! TO=$(grep "^TIMEOUT\>" ${CONFDIR}/insteon.conf | awk '{print $2}' | grep "[0-9]*")
+then
+	TO=1000
+fi
+
+if HOPS=$(grep "^HOPS\>" ${CONFDIR}/insteon.conf | awk '{print $2}' | grep "[0-9]*")
+then
+	case "$HOPS" in
+		0 | 1 | 2 | 3)
+			HOPS=$(printf "%.2X" $HOPS)
+			;;
+		*)
+			echo "ERROR: HOPS is out of range" >&2
+			exit 1
+			;;
+	esac
+else
+	HOPS="03"
+fi
+
+if echo "$line" | grep -q '".*"'
+then
+	scene=$(echo $line | sed 's/^[^"]*"//' | sed 's/".*//')
+	for d in $(echo $scene); do
+		insteon $d $2
+	done
+	exit 0
+fi
+
+device=$(echo $line | awk '{print $2}')
+
+command="$(echo $2 | tr A-Z a-z)"
+case "$command" in
+	on)
+		if [ "$3" != "" ]; then
+			brightness=$(printf "%.2x" $(echo "255 * $3 / 100" | bc))
+		else
+			brightness=FF
+		fi
+		${BINDIR}/plmsend -t $TO -d "$DEV" 0262${device}${HOPS}11${brightness}
+		;;
+	off)
+		${BINDIR}/plmsend -t $TO -d "$DEV" 0262${device}${HOPS}1300
+		;;
+	bright | dim)
+		if grep -q "^ONLEVELS\>" "${CONFDIR}/insteon.conf"
+		then
+			LEVS=$(grep "^ONLEVELS\>" "${CONFDIR}/insteon.conf" | awk '{print $2}')
+			if [ $LEVS -eq 0 ]
+			then
+				LEVS=1
+			fi
+			TMP=$(echo "$LEVS % 2" | bc)
+			if [ $TMP -eq 0 ]
+			then
+				echo "On level of 50% is the most inefficient." >&2
+				echo "You should set ONLEVELS to an odd number." >&2
+			fi
+		else
+			LEVS=5
+		fi
+
+		if [ $LEVS -eq 31 ]
+		then
+			if [ "$command" == "bright" ]
+			then
+				${BINDIR}/plmsend -t $TO -d "$DEV" 0262${device}${HOPS}1500
+			else
+				${BINDIR}/plmsend -t $TO -d "$DEV" 0262${device}${HOPS}1600
+			fi
+		else
+			LEV="$(${BINDIR}/insteon $1 status | sed 's/.*\(..\)$/\1/')"
+			LEV=$(printf "%d" 0x${LEV})
+
+			ANS=$(echo "$LEV * $LEVS / 255" | bc)
+			TMP=$ANS
+			ANS=$(echo "$LEV * $LEVS % 255" | bc)
+			LENGTH=$(echo "length ( $ANS )" | bc)
+			ANS=$(echo "$ANS * (10 ^ $LENGTH) / 255" | bc)
+			STEP="${TMP}.${ANS}"
+#			echo "Current level $LEV is step ${STEP}"
+			ANS=$(echo "($STEP % 1) >= .5" | bc)
+			if [ $ANS -eq 1 ]
+			then
+				STEP=$(($TMP + 1))
+			else
+				STEP=$TMP
+			fi
+#			echo "Rounded step is ${STEP}"
+			if [ "$command" == "bright" ]
+			then
+				((STEP++))
+				if [ $STEP -gt $LEVS ]
+				then
+					STEP=0
+				fi
+			else
+				if [ $STEP -eq 0 ]
+				then
+					STEP=$LEVS
+				else
+					((STEP--))
+				fi
+			fi
+#			echo "Next step is $STEP"
+
+			ANS=$(echo "$STEP * 255 / $LEVS" | bc)
+			brightness=$(printf "%.2X" $ANS)
+			${BINDIR}/plmsend -t $TO -d "$DEV" 0262${device}${HOPS}11${brightness}
+		fi
+		;;
+	ping)
+		${BINDIR}/plmsend -t $TO -d "$DEV" 0262${device}${HOPS}1000
+		;;
+	status)
+		${BINDIR}/plmsend -t $TO -d "$DEV" 0262${device}${HOPS}1900
+		;;
+	level)
+		LEVEL="$(${BINDIR}/plmsend -t $TO -d "$DEV" 0262${device}${HOPS}1900 | sed 's/^.*\(..\)$/\1/')"
+		if [ "$LEVEL" != "" ]; then
+			LEVEL=$(printf "%d" 0x${LEVEL})
+			LEVEL=$(echo "$LEVEL * 100 / 255" | bc)
+			echo "$LEVEL"
+		fi
+		;;
+	*)
+		echo "Unknown command"
+		usage
+		exit 2
+		;;
+esac
+
+exit 0

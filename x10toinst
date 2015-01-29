@@ -1,0 +1,150 @@
+#!/bin/bash
+#    x10toinst - wrapper for plmsend to bridge x10 to insteon protocols
+#    Copyright (C) 2008  Matthew Randolph
+#    Please see the file COPYING for license information.
+#
+#    This program is free software; you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation; either version 2 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program; if not, write to the Free Software
+#    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
+BINDIR="/usr/bin"
+CONFDIR="/etc"
+
+hextox10() {
+	local temp
+	local house
+	local unit
+	local command
+	if echo $1 | grep -qe "0252[[:xdigit:]]\{2\}[08]0"
+	then
+		temp=$(echo $1 | sed 's/0252\([0-9a-fA-F]\{2\}\)[08]0/\1/')
+		temp=$(echo $temp | tr a-f A-F)
+		house=$(echo $temp | sed 's/\(.\)./\1/' | tr 6E2A195D7F3B084C A-P)
+		temp=$(echo $temp | sed 's/.\(.\)/\1/' | tr 6E2A195D7F3B084C 1-9A-G | sed 's/\([A-G]\)/1\1/' | tr A-G 0-6)
+		if echo $1 | grep -qe "0252..00"
+		then
+			unit=$temp
+			echo "$house $unit"
+		else
+			case "$temp" in
+				1) command="All Lights Off"; ;;
+				2) command="Status = Off"; ;;
+				3) command="On"; ;;
+				4) command="Preset Dim"; ;;
+				5) command="All Lights On"; ;;
+				6) command="Hail Acknowledge"; ;;
+				7) command="Bright"; ;;
+				8) command="Status = On"; ;;
+				9) command="Extended Code"; ;;
+				10) command="Status Request"; ;;
+				11) command="Off"; ;;
+				12) command="Preset Dim"; ;;
+				13) command="All Units Off"; ;;
+				14) command="Hail Request"; ;;
+				15) command="Dim"; ;;
+				16) command="Extended Data"; ;;
+			esac
+			echo "$house $command"
+		fi
+	fi
+}
+
+cleanup() {
+	if [ "$plmcatpid" != "" ]
+	then
+		kill -9 ${plmcatpid} &>/dev/null
+		exit 1
+	else
+		pids=$(ps aux | grep plmcat | grep -v grep | wc -l)
+		if [ "$pids" = 1 ]
+		then
+			killall plmcat &>/dev/null
+			exit 2
+		fi
+		exit 3
+	fi
+}
+
+usage() {
+cat << end_of_usage
+USAGE: $(basename $0)
+
+	Note: watch for orphaned plmcat processes
+end_of_usage
+}
+
+if [ "$1" == "-h" -o "$1" == "--help" ]
+then
+	usage
+	exit 0
+fi
+
+if [ ! -e "${CONFDIR}/plmtools.conf" ]
+then
+	DEV="/dev/ttyUSB0"
+else
+	DEV=$(grep "^PLMTTY\>" ${CONFDIR}/plmtools.conf | sed 's/^.*"\(.*\)"$/\1/')
+fi
+
+trap cleanup EXIT
+
+str1=$(ps aux | grep plmcat | grep -v grep | awk '{printf $2 "\n"}')
+
+while read line; do
+	if [ "$firstrun" != "FALSE" ]
+	then
+		str2=$(ps aux | grep plmcat | grep -v grep | awk '{printf $2 "\n"}')
+		plmcatpid=$(cat <(echo $str1) <(echo $str2) | sort | uniq -u)
+		firstrun="FALSE"
+	fi
+
+	echo "$line" >&2
+	if echo "$line" | grep -qe "0252[[:xdigit:]]\{2\}00 0252[[:xdigit:]]\{2\}80"
+#	if echo "$line" | wc -w | grep -q "\<2\>"
+	then
+		x10msg1=$(hextox10 $(echo $line | cut -d\  -f 1))
+		house=$(echo $x10msg1 | cut -d\  -f 1)
+		unit=$(echo $x10msg1 | cut -d\  -f 2)
+		x10msg2=$(hextox10 $(echo $line | cut -d\  -f 2))
+		command=$(echo $x10msg2 | cut -d\  -f 2)
+
+		if grep -q "^$house $unit\>" ${CONFDIR}/x10toinst.conf
+		then
+			device=$(grep "^$house $unit\>" ${CONFDIR}/x10toinst.conf | awk '{print $3}')
+		else
+			device=""
+		fi
+	elif echo "$line" | grep -qe "0252[[:xdigit:]][45]80"
+	then
+		x10msg2=$(hextox10 $(echo $line | cut -d\  -f 2))
+		house2=$(echo $x10msg2 | cut -d\  -f 1)
+		if [ "$house" == "$house2" ]
+		then
+			command=$(echo $x10msg2 | cut -d\  -f 2)
+		fi
+	fi
+
+	if echo "$line" | grep -qe "^0252[[:xdigit:]]\{2\}[08]0\>"
+	then
+		if [ "$device" != "" ]
+		then
+			if [ "$command" != "" ]
+			then
+				echo "insteon $device $command"
+				${BINDIR}/insteon "$device" "$command"
+			else
+				echo "ERROR: unknown device or command"
+			fi
+		fi
+	fi
+done < <(${BINDIR}/plmcat -d "$DEV")
