@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
 	fd_set readfds;
 
 	// Parse command line using getopt() from libc
-	while (0 < (c = getopt(argc,argv,options))) {
+while (255 != (c = getopt(argc,argv,options))) {
 		switch (c) {
 		case 'd':
 			ttylinename = optarg;

@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
 	str = &c; // not really, but this suppresses a compiler warning
 
 	// Parse command line using getopt() from libc
-	while (0 < (c = getopt(argc,argv,options))) {
+while (255 != (c = getopt(argc,argv,options))) {
 		switch (c) {
 		case 'd':
 			ttylinename = optarg;

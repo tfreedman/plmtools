@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
 //	timeout.tv_nsec=0;
 
 	// Parse command line using getopt() from libc
-	while (0 < (c = getopt(argc,argv,options))) {
+while (255 != (c = getopt(argc,argv,options))) {
 		switch (c) {
 		case 'd':
 			ttylinename = optarg;
