@@ -41,7 +41,7 @@ void broken_pipe(int sig)
 }
 
 int main(int argc, char **argv) {
-	int TTYFD,nfds,ready,i=0;
+	int TTYFD,nfds,ready,i=0,ret;
 	FILE *ttyfd;
 	char c,buff[128],tbuff[128];
 	struct termios newtio;
@@ -55,8 +55,8 @@ int main(int argc, char **argv) {
 //	timeout.tv_nsec=0;
 
 	// Parse command line using getopt() from libc
-while (255 != (c = getopt(argc,argv,options))) {
-		switch (c) {
+while (-1 != (ret = getopt(argc,argv,options))) {
+		switch (ret) {
 		case 'd':
 			ttylinename = optarg;
 			break;
@@ -123,6 +123,10 @@ argv[0]);
 		FD_SET(TTYFD,&readfds);
 //		ready = pselect(nfds,&readfds,NULL,NULL,&timeout,NULL);
 		ready = pselect(nfds,&readfds,NULL,NULL,NULL,NULL);
+		if(ready == -1) {
+                	fprintf(stderr,"pselect failed with error %i\n",errno);
+               		exit(-1);
+		}
 		if (FD_ISSET(TTYFD,&readfds)) {
 			fgets(buff,127,ttyfd);
 			if ((uc)buff[0] == 0x02 && (uc)buff[1] == 0x52) {

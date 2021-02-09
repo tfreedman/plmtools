@@ -34,7 +34,7 @@ extern char *ttylinename;
 char *options = "d:h";
 
 int main(int argc, char **argv) {
-	int TTYFD,nfds,ready;
+	int TTYFD,nfds,ready,ret;
 	FILE *ttyfd;
 	char c,buff[128],tbuff[128],*cp;
 	struct termios newtio;
@@ -42,8 +42,8 @@ int main(int argc, char **argv) {
 	fd_set readfds;
 
 	// Parse command line using getopt() from libc
-while (255 != (c = getopt(argc,argv,options))) {
-		switch (c) {
+while (-1 != (ret = getopt(argc,argv,options))) {
+		switch (ret) {
 		case 'd':
 			ttylinename = optarg;
 			break;
@@ -115,6 +115,10 @@ while (255 != (c = getopt(argc,argv,options))) {
 		FD_SET(STDIN,&readfds);
 		FD_SET(TTYFD,&readfds);
 		ready = pselect(nfds,&readfds,NULL,NULL,NULL,NULL);
+		if(ready == -1) {
+			fprintf(stderr,"pselect failed with error %i\n",errno);
+			exit(-1);
+		}
 		if (FD_ISSET(TTYFD,&readfds)) {
 			fgets(buff,127,ttyfd);
 			if ((uc)buff[3] == 0x03 && (uc)buff[4] == 0x05 && (uc)buff[6] == 0x06)
@@ -127,6 +131,10 @@ while (255 != (c = getopt(argc,argv,options))) {
 				// if first half of two part command
 					FD_SET(TTYFD,&readfds);
 					ready = pselect(nfds,&readfds,NULL,NULL,NULL,NULL);
+					if(ready == -1) {
+						fprintf(stderr,"pselect failed with error %i\n",errno);
+						exit(-1);
+					}
 					if (FD_ISSET(TTYFD,&readfds)) {
 						fgets(tbuff,127,ttyfd);
 						printf("%.2X%.2X%.2X%.2X %.2X%.2X%.2X%.2X\n",(uc)buff[0],(uc)buff[1],(uc)buff[2],(uc)buff[3],(uc)tbuff[0],(uc)tbuff[1],(uc)tbuff[2],(uc)tbuff[3]);
@@ -142,6 +150,10 @@ while (255 != (c = getopt(argc,argv,options))) {
 					// note: should test that it really is a duplicate line
 						FD_SET(TTYFD,&readfds);
 						ready = pselect(nfds,&readfds,NULL,NULL,NULL,NULL);
+						if(ready == -1) {
+							fprintf(stderr,"pselect failed with error %i\n",errno);
+							exit(-1);
+						}
 						if (FD_ISSET(TTYFD,&readfds))
 							fgets(buff,127,ttyfd);
 					}
