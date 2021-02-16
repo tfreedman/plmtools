@@ -34,7 +34,7 @@ extern char *ttylinename;
 char *options = "d:e:t:vh";
 
 int main(int argc, char **argv) {
-	int ttyfd,nfds,ready;
+	int ttyfd,nfds,ready,ret;
 	char c,*str,*cp,buff[128];
 	struct termios newtio;
 	fd_set readfds;
@@ -49,11 +49,9 @@ int main(int argc, char **argv) {
 
 	struct timespec sleeptime;
 
-	str = &c; // not really, but this suppresses a compiler warning
-
 	// Parse command line using getopt() from libc
-while (255 != (c = getopt(argc,argv,options))) {
-		switch (c) {
+while (-1 != (ret = getopt(argc,argv,options))) {
+		switch (ret) {
 		case 'd':
 			ttylinename = optarg;
 			break;
@@ -190,6 +188,10 @@ argv[0]);
 
 	// sleep for a while unless data arrives
 	ready = pselect(nfds,&readfds,NULL,NULL,&sleeptime,NULL);
+	if(ready == -1) {
+		fprintf(stderr,"pselect failed with error %i\n",errno);
+		exit(-1);
+	}
 	while (0 < read(ttyfd,&c,1)) {
 		outhex(STDOUT,c);
 		wrote = TRUE;
